@@ -61,7 +61,7 @@ class ModelArgs:
     n_local_heads: int = -1
     head_dim: int = 64
     norm_eps: float = 1e-5
-    dtype: torch.dtype = torch.bfloat16
+    dtype: torch.dtype = torch.float16
 
     def __post_init__(self):
         if self.n_local_heads == -1:
@@ -72,7 +72,7 @@ class ModelArgs:
             self.intermediate_size = find_multiple(n_hidden, 256)
         self.head_dim = self.dim // self.n_head
 
-        self.dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16}[get_default_dtype()]
+        self.dtype = {"float16": torch.float16, "float16": torch.float16}[get_default_dtype()]
 
     @classmethod
     def from_name(cls, name: str):
@@ -217,6 +217,7 @@ class Attention(nn.Module):
         if self.kv_cache is not None:
             k, v = self.kv_cache.update(input_pos, k, v)
 
+        q = q.half()
         k = k.repeat_interleave(self.n_head // self.n_local_heads, dim=1)
         v = v.repeat_interleave(self.n_head // self.n_local_heads, dim=1)
         y = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)

@@ -350,7 +350,7 @@ class CausalInferenceMixin:
         speaker_embs: Optional[torch.Tensor],
         batch_size: int,
         guidance_scale: Optional[Tuple[float, float]] = None,
-        dtype: torch.dtype = torch.bfloat16,
+        dtype: torch.dtype = torch.float16,
         end_of_audio_token: int,
         end_of_text_token: int,
     ) -> torch.Tensor:
@@ -496,11 +496,11 @@ class CausalInferenceMixin:
             raise Exception("Causal sampling is only supported for causal models")
 
         if self.kv_cache_enabled:
-            print("!!!! USING KV-CACHING ASSUMED TORCH.BFLOAT16")
+            print("!!!! USING KV-CACHING ASSUMED TORCH.float16")
             self.empty_kv_cache(
                 batch_size=1,
                 kv_cache_maxlen=self.config.block_size,
-                dtype=torch.bfloat16,
+                dtype=torch.float16,
             )
 
         for i in range(max_new_tokens):

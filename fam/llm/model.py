@@ -351,7 +351,7 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
         speaker_embs: Optional[torch.Tensor] = None,
         batch_size: Optional[int] = None,
         guidance_scale: Optional[Tuple[float, float]] = None,
-        dtype: torch.dtype = torch.bfloat16,
+        dtype: torch.dtype = torch.float16,
         end_of_audio_token: int = 99999,  # Dummy values will disable early termination / guidance features.
         end_of_text_token: int = 99999,
     ):

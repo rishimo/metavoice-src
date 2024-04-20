@@ -91,7 +91,7 @@ class TTS:
         )
         self.enhancer = get_enhancer("df")
 
-        self.precision = {"float16": torch.float16, "bfloat16": torch.bfloat16}[self._dtype]
+        self.precision = {"float16": torch.float16, "float16": torch.float16}[self._dtype]
         self.model, self.tokenizer, self.smodel, self.model_size = build_model(
             precision=self.precision,
             checkpoint_path=Path(self._first_stage_ckpt),

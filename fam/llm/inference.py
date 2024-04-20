@@ -37,7 +37,7 @@ class InferenceConfig:
     num_samples: int = 10  # number of samples to draw
     seed: int = 1337  # random seed
     device: str = "cuda"
-    dtype: str = "bfloat16"
+    dtype: str = "float16"
     compile: bool = False
     init_from: str = "resume"  # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
 
@@ -74,7 +74,7 @@ class Model:
         self.ptdtype = {
             "float32": torch.float32,
             "tfloat32": torch.float32,
-            "bfloat16": torch.bfloat16,
+            "float16": torch.float16,
             "float16": torch.float16,
         }[config.dtype]
         self._ctx = (
@@ -625,7 +625,7 @@ class SamplingControllerConfig:
     device: Literal["cuda", "cpu"] = "cuda"
     """Device to use for sampling."""
 
-    dtype: Literal["bfloat16", "float16", "float32", "tfloat32"] = get_default_dtype()
+    dtype: Literal["float16", "float16", "float32", "tfloat32"] = get_default_dtype()
     """Data type to use for sampling."""
 
     compile: bool = False

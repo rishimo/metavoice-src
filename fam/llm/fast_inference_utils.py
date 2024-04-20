@@ -278,7 +278,7 @@ def _load_model(
             k = k.replace(".mlp.c_proj.", ".feed_forward.w2.")
 
     model.load_state_dict(state_dict, assign=True)
-    model = model.to(device=device, dtype=torch.bfloat16)
+    model = model.to(device=device, dtype=torch.float16)
 
     if quantisation_mode == "int8":
         warnings.warn(
@@ -291,7 +291,7 @@ def _load_model(
         quantized_state_dict = simple_quantizer.create_quantized_state_dict()
         model = simple_quantizer.convert_for_runtime()
         model.load_state_dict(quantized_state_dict, assign=True)
-        model = model.to(device=device, dtype=torch.bfloat16)
+        model = model.to(device=device, dtype=torch.float16)
         # TODO: int8/int4 doesn't decrease VRAM usage substantially... fix that (might be linked to kv-cache)
         torch.cuda.empty_cache()
     elif quantisation_mode == "int4":
@@ -302,7 +302,7 @@ def _load_model(
         quantized_state_dict = simple_quantizer.create_quantized_state_dict()
         model = simple_quantizer.convert_for_runtime(use_cuda=True)
         model.load_state_dict(quantized_state_dict, assign=True)
-        model = model.to(device=device, dtype=torch.bfloat16)
+        model = model.to(device=device, dtype=torch.float16)
         torch.cuda.empty_cache()
     elif quantisation_mode is not None:
         raise Exception(f"Invalid quantisation mode {quantisation_mode}! Must be either 'int4' or 'int8'!")
