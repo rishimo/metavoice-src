@@ -133,6 +133,7 @@ if __name__ == "__main__":
     GlobalState.config = tyro.cli(ServingConfig)
     GlobalState.tts = TTS(
         seed=GlobalState.config.seed,
+        output_dir='/home/files/output',
         quantisation_mode=GlobalState.config.quantisation_mode,
     )
 
