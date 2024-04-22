@@ -53,7 +53,9 @@ class MLP(nn.Module):
             if config.swiglu_multiple_of is None:
                 raise Exception("SwiGLU requires swiglu_multiple_of to be set")
             hidden_dim = int(2 * hidden_dim / 3)
-            hidden_dim = config.swiglu_multiple_of * math.ceil(hidden_dim / config.swiglu_multiple_of)
+            hidden_dim = config.swiglu_multiple_of * math.ceil(
+                hidden_dim / config.swiglu_multiple_of
+            )
             # set name to `c_proj` so that the right initialisation gets applied to it in GPT.__init__()
             self.swiglu = SwiGLU(config.n_embd, hidden_dim, bias=config.bias)
             self.c_proj = nn.Linear(hidden_dim, config.n_embd, bias=config.bias)

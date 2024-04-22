@@ -39,7 +39,9 @@ class InferenceConfig:
     device: str = "cuda"
     dtype: str = "float16"
     compile: bool = False
-    init_from: str = "resume"  # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
+    init_from: str = (
+        "resume"  # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
+    )
 
     def __str__(self):
         field_strs = []
@@ -68,9 +70,15 @@ class Model:
 
         torch.manual_seed(config.seed)
         torch.cuda.manual_seed(config.seed)
-        torch.backends.cuda.matmul.allow_tf32 = True if config.dtype != "float32" else False  # allow tf32 on matmul
-        torch.backends.cudnn.allow_tf32 = True if config.dtype != "float32" else False  # allow tf32 on cudnn
-        device_type = "cuda" if "cuda" in config.device else "cpu"  # for later use in torch.autocast
+        torch.backends.cuda.matmul.allow_tf32 = (
+            True if config.dtype != "float32" else False
+        )  # allow tf32 on matmul
+        torch.backends.cudnn.allow_tf32 = (
+            True if config.dtype != "float32" else False
+        )  # allow tf32 on cudnn
+        device_type = (
+            "cuda" if "cuda" in config.device else "cpu"
+        )  # for later use in torch.autocast
         self.ptdtype = {
             "float32": torch.float32,
             "tfloat32": torch.float32,
@@ -78,7 +86,9 @@ class Model:
             "float16": torch.float16,
         }[config.dtype]
         self._ctx = (
-            nullcontext() if device_type == "cpu" else torch.amp.autocast(device_type=device_type, dtype=self.ptdtype)
+            nullcontext()
+            if device_type == "cpu"
+            else torch.amp.autocast(device_type=device_type, dtype=self.ptdtype)
         )
 
         self.use_bpe_tokenizer = False
@@ -102,7 +112,9 @@ class Model:
     def _init_model(self):
         if self.config.init_from == "resume":
             # init from a model saved in a specific directory
-            checkpoint = torch.load(self.config.ckpt_path, map_location=self.config.device)
+            checkpoint = torch.load(
+                self.config.ckpt_path, map_location=self.config.device
+            )
             self.vocab_sizes = checkpoint["model_args"]["vocab_sizes"]
 
             self.load_meta = False
@@ -115,20 +127,27 @@ class Model:
                 self.load_meta = True
 
             if self.load_meta:
-                self.use_bpe_tokenizer = "stoi" not in self.meta or "itos" not in self.meta
+                self.use_bpe_tokenizer = (
+                    "stoi" not in self.meta or "itos" not in self.meta
+                )
                 self.speaker_cond = self.meta.get("speaker_cond")
 
             if self.speaker_cond:
                 speaker_emb_size = self.meta["speaker_emb_size"]
 
             model_args = checkpoint["model_args"]
-            if "causal" in self.checkpoint_config and self.checkpoint_config["causal"] is False:
+            if (
+                "causal" in self.checkpoint_config
+                and self.checkpoint_config["causal"] is False
+            ):
                 self._encodec_ctx_window = model_args["block_size"]
 
             gptconf = GPTConfig(**model_args)
 
             # TODO: rename `speaker_emb_dim` to `speaker_emb_size`.
-            self.model = GPT(gptconf, speaker_emb_dim=speaker_emb_size if self.speaker_cond else None)
+            self.model = GPT(
+                gptconf, speaker_emb_dim=speaker_emb_size if self.speaker_cond else None
+            )
             state_dict = checkpoint["model"]
             unwanted_prefix = "_orig_mod."
             for k, v in list(state_dict.items()):
@@ -147,13 +166,18 @@ class Model:
             self.model = torch.compile(self.model)  # type: ignore
 
         if self.use_kv_cache is not None:
-            if "causal" in self.checkpoint_config and self.checkpoint_config["causal"] is False:
+            if (
+                "causal" in self.checkpoint_config
+                and self.checkpoint_config["causal"] is False
+            ):
                 raise Exception("kv_cache not supported for non-causal models!")
 
             if self.use_kv_cache == "vanilla":
                 self.model.enable_kv_cache()
             else:
-                raise NotImplementedError(f"kv_cache type {self.use_kv_cache} not implemented!")
+                raise NotImplementedError(
+                    f"kv_cache type {self.use_kv_cache} not implemented!"
+                )
 
     def causal_sample(
         self,
@@ -180,13 +204,19 @@ class Model:
         seq_lens = []
         xs = []
         for i, encoded_text in enumerate(encoded_texts):
-            encoded_text = torch.tensor([encoded_text], dtype=torch.long, device=self.config.device)
+            encoded_text = torch.tensor(
+                [encoded_text], dtype=torch.long, device=self.config.device
+            )
             # TODO: remove magic number
             xs.append(
                 torch.cat(
                     # [1st hierarchy of text, *remaining hierarchies of padded tokens]
                     # TODO: self.vocab_sizes should be from the model config?
-                    [encoded_text, *[torch.ones_like(encoded_text) * 1024] * (len(self.vocab_sizes) - 1)],
+                    [
+                        encoded_text,
+                        *[torch.ones_like(encoded_text) * 1024]
+                        * (len(self.vocab_sizes) - 1),
+                    ],
                     dim=0,
                 ).unsqueeze(0)
             )  # b x [(b=1, c, t)]
@@ -195,7 +225,11 @@ class Model:
         assert len(xs) == len(seq_lens)
 
         ## equalise the shapes in the batch. we can use torch.zeros as tokens > seq_lens will be masked out.
-        x = torch.zeros((len(encoded_texts), xs[0].shape[1], max_len), dtype=torch.long, device=self.config.device)
+        x = torch.zeros(
+            (len(encoded_texts), xs[0].shape[1], max_len),
+            dtype=torch.long,
+            device=self.config.device,
+        )
         for i, _xs in enumerate(xs):
             assert _xs.shape[-1] == seq_lens[i]
             x[i, :, : seq_lens[i]] = _xs
@@ -241,7 +275,9 @@ class Model:
                         end_of_text_token=self.tokenizer.eot_token,
                     )
                     for i in range(len(y)):
-                        to_return.append(self.decoder.decode(tokens=y[i].tolist(), causal=True))
+                        to_return.append(
+                            self.decoder.decode(tokens=y[i].tolist(), causal=True)
+                        )
 
                 return to_return
 
@@ -274,16 +310,23 @@ class Model:
             # TODO: should only happen if decoder is encodecdeocder?
             assert encodec_token.shape[0] == 1
             encodec_token = encodec_token[0].tolist()  # (b=1, c, t) -> (c, t)
-            assert len(encodec_token) >= 1 and len(encodec_token) <= self._num_encodec_codebooks
+            assert (
+                len(encodec_token) >= 1
+                and len(encodec_token) <= self._num_encodec_codebooks
+            )
 
             ## setup hierarchies of tokens
             # TODO: refactor and merge with code in processing.py
             text_tokens = encoded_text  # (t,)
 
             hierarchies_in = []
-            hierarchies_in.append(text_tokens + encodec_token[0] + [self._encodec_codes_pad_token])
             hierarchies_in.append(
-                [self._encodec_codes_pad_token] * len(text_tokens) + encodec_token[1] + [self._encodec_codes_pad_token]
+                text_tokens + encodec_token[0] + [self._encodec_codes_pad_token]
+            )
+            hierarchies_in.append(
+                [self._encodec_codes_pad_token] * len(text_tokens)
+                + encodec_token[1]
+                + [self._encodec_codes_pad_token]
             )
 
             ## adding padding / cutting to the right size as needed
@@ -293,18 +336,26 @@ class Model:
                 assert len(t_hierarchy) == len(hierarchies_in[0])
                 if len(t_hierarchy) < self._encodec_ctx_window:
                     padded_hierarchies_input.append(
-                        t_hierarchy + [self._encodec_codes_pad_token] * (self._encodec_ctx_window - len(t_hierarchy))
+                        t_hierarchy
+                        + [self._encodec_codes_pad_token]
+                        * (self._encodec_ctx_window - len(t_hierarchy))
                     )
                 elif len(t_hierarchy) > self._encodec_ctx_window:
-                    padded_hierarchies_input.append(t_hierarchy[: self._encodec_ctx_window])
+                    padded_hierarchies_input.append(
+                        t_hierarchy[: self._encodec_ctx_window]
+                    )
                 else:
                     padded_hierarchies_input.append(t_hierarchy)
 
             padded_hierarchies_inputs.append(padded_hierarchies_input)
 
         ## check that the input is correct
-        in_x = torch.tensor(padded_hierarchies_inputs, dtype=torch.long, device=self.config.device)
-        assert in_x.shape[0] == speaker_embs.shape[0] if speaker_embs is not None else True
+        in_x = torch.tensor(
+            padded_hierarchies_inputs, dtype=torch.long, device=self.config.device
+        )
+        assert (
+            in_x.shape[0] == speaker_embs.shape[0] if speaker_embs is not None else True
+        )
 
         if self.speaker_cond is False:
             speaker_embs = None
@@ -329,7 +380,11 @@ class Model:
                     b_tokens = torch.cat([in_x, y], dim=1)
                     for tokens in b_tokens:
                         try:
-                            to_return.append(self.decoder.decode(tokens=tokens.tolist(), causal=False))
+                            to_return.append(
+                                self.decoder.decode(
+                                    tokens=tokens.tolist(), causal=False
+                                )
+                            )
                         except Exception as e:
                             print("failed to run MBD.")
                             print(f"reason: {str(e)}")
@@ -377,7 +432,9 @@ class Model:
             )
 
 
-def save_result_metadata(wav_path, ref_path, text, first_stage_ckpt_path, second_stage_ckpt_path):
+def save_result_metadata(
+    wav_path, ref_path, text, first_stage_ckpt_path, second_stage_ckpt_path
+):
     if first_stage_ckpt_path is None or second_stage_ckpt_path is None:
         return
     json.dump(
@@ -400,7 +457,9 @@ def get_cached_file(file_or_uri: str):
     if is_uri:
         ext = pathlib.Path(file_or_uri).suffix
         # hash the file path to get the cache name
-        _cache_name = "audio_" + hashlib.md5(file_or_uri.encode("utf-8")).hexdigest() + ext
+        _cache_name = (
+            "audio_" + hashlib.md5(file_or_uri.encode("utf-8")).hexdigest() + ext
+        )
 
         os.makedirs(os.path.expanduser("~/.cache/metavoice/"), exist_ok=True)
         cache_path = os.path.expanduser(f"~/.cache/metavoice/{_cache_name}")
@@ -421,13 +480,19 @@ def get_cached_embedding(local_file_path: str, spkemb_model):
         raise FileNotFoundError(f"File {local_file_path} not found!")
 
     # hash the file path to get the cache name
-    _cache_name = "embedding_" + hashlib.md5(local_file_path.encode("utf-8")).hexdigest() + ".pt"
+    _cache_name = (
+        "embedding_" + hashlib.md5(local_file_path.encode("utf-8")).hexdigest() + ".pt"
+    )
 
     os.makedirs(os.path.expanduser("~/.cache/fam/"), exist_ok=True)
     cache_path = os.path.expanduser(f"~/.cache/fam/{_cache_name}")
 
     if not os.path.exists(cache_path):
-        spk_emb = spkemb_model.embed_utterance_from_file(local_file_path, numpy=False).unsqueeze(0)  # (b=1, c)
+        spk_emb = spkemb_model.embed_utterance_from_file(
+            local_file_path, numpy=False
+        ).unsqueeze(
+            0
+        )  # (b=1, c)
         torch.save(spk_emb, cache_path)
     else:
         spk_emb = torch.load(cache_path)
@@ -451,7 +516,6 @@ def _sample_utterance_batch(
     temperature: Optional[float],
     batch_size: int = 128,
 ) -> List[str]:
-
     speaker_embs = []
     refs = spk_cond_paths.copy()
 
@@ -461,10 +525,14 @@ def _sample_utterance_batch(
     )
 
     for i, (text, spk_cond_path) in tqdm.tqdm(
-        enumerate(zip(texts, spk_cond_paths)), total=len(texts), desc="calculating speaker embeddings"
+        enumerate(zip(texts, spk_cond_paths)),
+        total=len(texts),
+        desc="calculating speaker embeddings",
     ):
         texts[i] = normalize_text(text)
-        speaker_embs.append(get_cached_embedding(spk_cond_path, spkemb_model) if spk_cond_path else None)
+        speaker_embs.append(
+            get_cached_embedding(spk_cond_path, spkemb_model) if spk_cond_path else None
+        )
 
     b_speaker_embs = torch.cat(speaker_embs, dim=0)
 
@@ -493,16 +561,22 @@ def _sample_utterance_batch(
         max_new_tokens=None,
     )
 
-    for text, tokens, speaker_embs, ref_name, wav_file in zip(texts, b_tokens, b_speaker_embs, refs, wav_files):
+    for text, tokens, speaker_embs, ref_name, wav_file in zip(
+        texts, b_tokens, b_speaker_embs, refs, wav_files
+    ):
         if wav_file is None:
             continue
 
         with tempfile.NamedTemporaryFile(suffix=".wav") as enhanced_tmp:
             if enhancer is not None:
-                enhancer = get_enhancer(enhancer) if isinstance(enhancer, str) else enhancer
+                enhancer = (
+                    get_enhancer(enhancer) if isinstance(enhancer, str) else enhancer
+                )
                 enhancer(str(wav_file) + ".wav", enhanced_tmp.name)
                 # copy enhanced_tmp.name back to wav_file
-                print(f"copying enhanced file from {enhanced_tmp.name} to {str(wav_file) + '.wav'}.")
+                print(
+                    f"copying enhanced file from {enhanced_tmp.name} to {str(wav_file) + '.wav'}."
+                )
                 shutil.copy2(enhanced_tmp.name, str(wav_file) + ".wav")
 
             save_result_metadata(
@@ -514,7 +588,9 @@ def _sample_utterance_batch(
             )
 
     print(f"time_to_synth_s: {time.time() - start}")
-    return [str(w) + ".wav" if not str(w).endswith(".wav") else str(w) for w in wav_files]
+    return [
+        str(w) + ".wav" if not str(w).endswith(".wav") else str(w) for w in wav_files
+    ]
 
 
 def sample_utterance(
@@ -558,9 +634,14 @@ def sample_utterance(
     )[0]
 
 
-def build_models(config_first_stage, config_second_stage, model_dir, device, use_kv_cache):
+def build_models(
+    config_first_stage, config_second_stage, model_dir, device, use_kv_cache
+):
     smodel = SpeakerEncoder(
-        weights_fpath=os.path.join(model_dir, "speaker_encoder.pt"), device=device, eval=True, verbose=False
+        weights_fpath=os.path.join(model_dir, "speaker_encoder.pt"),
+        device=device,
+        eval=True,
+        verbose=False,
     )
     data_adapter = FlattenedInterleavedEncodec2Codebook(end_of_audio_token=1024)
     llm_first_stage = Model(
@@ -572,7 +653,10 @@ def build_models(config_first_stage, config_second_stage, model_dir, device, use
     )
     data_adapter_second_stage = TiltedEncodec(end_of_audio_token=1024)
     llm_second_stage = Model(
-        config_second_stage, TrainedBPETokeniser, EncodecDecoder, data_adapter_fn=data_adapter_second_stage.decode
+        config_second_stage,
+        TrainedBPETokeniser,
+        EncodecDecoder,
+        data_adapter_fn=data_adapter_second_stage.decode,
     )
     return smodel, llm_first_stage, llm_second_stage
 
@@ -599,9 +683,7 @@ class SamplingControllerConfig:
     huggingface_repo_id: str = "metavoiceio/metavoice-1B-v0.1"
     """Absolute path to the model directory."""
 
-    text: str = (
-        "This is a demo of text to speech by MetaVoice-1B, an open-source foundational audio model by MetaVoice."
-    )
+    text: str = "This is a demo of text to speech by MetaVoice-1B, an open-source foundational audio model by MetaVoice."
     """Text to synthesise."""
 
     num_samples: int = 1
@@ -684,9 +766,7 @@ if __name__ == "__main__":
         output_dir=sampling_config.output_dir,
     )
 
-    sampling_config.max_new_tokens *= (
-        2  # deal with max_new_tokens for flattened interleaving! (should scale with num_codebooks?)
-    )
+    sampling_config.max_new_tokens *= 2  # deal with max_new_tokens for flattened interleaving! (should scale with num_codebooks?)
 
     # define models
     smodel, llm_first_stage, llm_second_stage = build_models(

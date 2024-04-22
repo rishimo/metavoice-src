@@ -27,7 +27,9 @@ from fam.telemetry.posthog import PosthogClient
 posthog = PosthogClient()
 
 dtype: Literal["float16", "float16", "tfloat32", "float32"] = (
-    "float16" if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"
+    "float16"
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    else "float16"
 )  # 'float32', 'float16', or 'float16', the latter will auto implement a GradScaler
 seed_offset = 0
 
@@ -36,10 +38,17 @@ torch.backends.cuda.matmul.allow_tf32 = True if dtype != "float32" else False
 torch.backends.cudnn.allow_tf32 = True if dtype != "float32" else False
 device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.autocast
 # note: float16 data type will automatically use a GradScaler
-ptdtype = {"float32": torch.float32, "tfloat32": torch.float32, "float16": torch.float16, "float16": torch.float16}[
-    dtype
-]
-ctx = nullcontext() if device_type == "cpu" else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
+ptdtype = {
+    "float32": torch.float32,
+    "tfloat32": torch.float32,
+    "float16": torch.float16,
+    "float16": torch.float16,
+}[dtype]
+ctx = (
+    nullcontext()
+    if device_type == "cpu"
+    else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
+)
 
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
@@ -58,7 +67,11 @@ if master_process:
 
 def get_globals_state():
     """Return entirety of configuration global state which can be used for logging."""
-    config_keys = [k for k, v in globals().items() if not k.startswith("_") and isinstance(v, (int, float, bool, str))]
+    config_keys = [
+        k
+        for k, v in globals().items()
+        if not k.startswith("_") and isinstance(v, (int, float, bool, str))
+    ]
     return {k: globals()[k] for k in config_keys}  # will be useful for logging
 
 
@@ -91,7 +104,15 @@ def strip_prefix(state_dict: Dict[str, Any], unwanted_prefix: str):
 def force_ckpt_args(model_args, checkpoint_model_args) -> None:
     # force these config attributes to be equal otherwise we can't even resume training
     # the rest of the attributes (e.g. dropout) can stay as desired from command line
-    for k in ["n_layer", "n_head", "n_embd", "block_size", "bias", "vocab_sizes", "causal"]:
+    for k in [
+        "n_layer",
+        "n_head",
+        "n_embd",
+        "block_size",
+        "bias",
+        "vocab_sizes",
+        "causal",
+    ]:
         model_args[k] = checkpoint_model_args[k]
     # this enables backward compatability with previously saved checkpoints.
     for k in [
@@ -116,10 +137,18 @@ def force_ckpt_args(model_args, checkpoint_model_args) -> None:
 @click.command()
 @click.option("--train", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--val", type=click.Path(exists=True, path_type=Path), required=True)
-@click.option("--model-id", type=str, required=False, default="metavoiceio/metavoice-1B-v0.1")
+@click.option(
+    "--model-id", type=str, required=False, default="metavoiceio/metavoice-1B-v0.1"
+)
 @click.option("--ckpt", type=click.Path(exists=True, path_type=Path))
 @click.option("--spk-emb-ckpt", type=click.Path(exists=True, path_type=Path))
-def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ckpt: Optional[Path]):
+def main(
+    train: Path,
+    val: Path,
+    model_id: str,
+    ckpt: Optional[Path],
+    spk_emb_ckpt: Optional[Path],
+):
     if ckpt and spk_emb_ckpt:
         checkpoint_path, spk_emb_ckpt_path = ckpt, spk_emb_ckpt
     else:
@@ -127,7 +156,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
         checkpoint_path = Path(f"{_model_dir}/first_stage.pt")
         spk_emb_ckpt_path = Path(f"{_model_dir}/speaker_encoder.pt")
 
-    mode_params = get_params_for_mode(audio_token_mode, num_max_audio_tokens_timesteps=num_max_audio_tokens_timesteps)
+    mode_params = get_params_for_mode(
+        audio_token_mode, num_max_audio_tokens_timesteps=num_max_audio_tokens_timesteps
+    )
     config = get_globals_state()
 
     checkpoint = torch.load(str(checkpoint_path), mmap=True, map_location=device)
@@ -145,7 +176,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
     model.to(device)
     # initialize a GradScaler. If enabled=False scaler is a no-op
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == "float16"))
-    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
+    optimizer = model.configure_optimizers(
+        weight_decay, learning_rate, (beta1, beta2), device_type
+    )
     if compile:
         print("Compiling the model... (takes a ~minute)")
         # requires PyTorch 2.0
@@ -160,7 +193,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
             return torch.nan
         losses = []
         for _, batch in zip(tqdm(range(iters)), dataset):
-            X, Y, SE = get_training_tuple(batch, causal, num_codebooks, speaker_cond, device)
+            X, Y, SE = get_training_tuple(
+                batch, causal, num_codebooks, speaker_cond, device
+            )
             with ctx:
                 _, loss = model(X, Y, speaker_embs=SE, speaker_emb_mask=None)
             losses.append(loss.item())
@@ -188,7 +223,13 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
         else:
             resume = None
 
-        wandb.init(project=wandb_project, name=wandb_run_name, tags=wandb_tags, config=config, resume=resume)
+        wandb.init(
+            project=wandb_project,
+            name=wandb_run_name,
+            tags=wandb_tags,
+            config=config,
+            resume=resume,
+        )
 
     train_dataset = DynamicComputeDataset.from_meta(
         tokenizer_info,
@@ -208,7 +249,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
         mode_params["ctx_window"],
         device,
     )
-    train_dataloader = itertools.cycle(DataLoader(train_dataset, batch_size, shuffle=True))
+    train_dataloader = itertools.cycle(
+        DataLoader(train_dataset, batch_size, shuffle=True)
+    )
     train_data = iter(train_dataloader)
     # we do not perform any explicit checks for dataset overlap & leave it to the user
     # to handle this
@@ -233,15 +276,20 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
         progress = None
 
     # finetune last X transformer blocks and the ln_f layer
-    trainable_count = lambda model: sum(p.numel() for p in model.parameters() if p.requires_grad)
+    trainable_count = lambda model: sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
     print(f"Before layer freezing {trainable_count(model)=}...")
     for param in model.parameters():
         param.requires_grad = False
     for param in itertools.chain(
-        model.transformer.ln_f.parameters(), model.transformer.h[last_n_blocks_to_finetune * -1 :].parameters()
+        model.transformer.ln_f.parameters(),
+        model.transformer.h[last_n_blocks_to_finetune * -1 :].parameters(),
     ):
         param.requires_grad = True
-    print(f"After freezing excl. last {last_n_blocks_to_finetune} transformer blocks: {trainable_count(model)=}...")
+    print(
+        f"After freezing excl. last {last_n_blocks_to_finetune} transformer blocks: {trainable_count(model)=}..."
+    )
 
     # log start of finetuning event
     properties = {
@@ -275,7 +323,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
                         "val": estimate_loss(eval_val_data),
                     }
                     model.train()
-                print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+                print(
+                    f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
+                )
                 if wandb_log:
                     wandb.log(
                         {
@@ -326,7 +376,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
                     model.require_backward_grad_sync = micro_step == gradient_accumulation_steps - 1  # type: ignore
                 with ctx:  # type: ignore
                     logits, loss = model(X, Y, speaker_embs=SE, speaker_emb_mask=None)
-                    loss = loss / gradient_accumulation_steps  # scale the loss to account for gradient accumulation
+                    loss = (
+                        loss / gradient_accumulation_steps
+                    )  # scale the loss to account for gradient accumulation
                 # immediately async prefetch next batch while model is doing the forward pass on the GPU
                 batch = next(train_data)
                 X, Y, SE = get_training_tuple(
@@ -341,7 +393,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
             # clip the gradient
             if grad_clip != 0.0:
                 scaler.unscale_(optimizer)
-                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                total_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), grad_clip
+                )
             # step the optimizer and scaler if training in fp16
             scaler.step(optimizer)
             scaler.update()
@@ -357,7 +411,9 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
                 # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
                 lossf = loss.item() * gradient_accumulation_steps
                 progress.update(1)
-                progress.set_description(f"Training: loss {lossf:.4f}, time {dt*1000:.2f}ms")
+                progress.set_description(
+                    f"Training: loss {lossf:.4f}, time {dt*1000:.2f}ms"
+                )
                 if iter_num % log_interval == 0:
                     print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
@@ -370,7 +426,10 @@ def main(train: Path, val: Path, model_id: str, ckpt: Optional[Path], spk_emb_ck
                 posthog.capture(
                     TelemetryEvent(
                         name="user_completed_finetuning",
-                        properties={"finetune_jobid": finetune_jobid, "loss": round(lossf, 4)},
+                        properties={
+                            "finetune_jobid": finetune_jobid,
+                            "loss": round(lossf, 4),
+                        },
                     )
                 )
 

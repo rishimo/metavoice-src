@@ -2,7 +2,9 @@ import tiktoken
 
 
 class TrainedBPETokeniser:
-    def __init__(self, name, pat_str, mergeable_ranks, special_tokens, offset=None) -> None:
+    def __init__(
+        self, name, pat_str, mergeable_ranks, special_tokens, offset=None
+    ) -> None:
         self.tokenizer = tiktoken.Encoding(
             name=name,
             pat_str=pat_str,

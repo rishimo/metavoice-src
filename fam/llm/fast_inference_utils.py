@@ -48,9 +48,7 @@ def device_sync(device):
 
 torch._inductor.config.coordinate_descent_tuning = True
 torch._inductor.config.triton.unique_kernel_names = True
-torch._inductor.config.fx_graph_cache = (
-    True  # Experimental feature to reduce compilation times, will be on by default in future
-)
+torch._inductor.config.fx_graph_cache = True  # Experimental feature to reduce compilation times, will be on by default in future
 
 # imports need to happen after setting above flags
 from fam.llm.fast_model import Transformer
@@ -77,7 +75,9 @@ def top_p_sample(logits: torch.Tensor, top_p: torch.Tensor):
     sorted_indices_to_remove[-1:] = 0
 
     # scatter sorted tensors to original indexing
-    indices_to_remove = sorted_indices_to_remove.scatter(0, sorted_indices, sorted_indices_to_remove)
+    indices_to_remove = sorted_indices_to_remove.scatter(
+        0, sorted_indices, sorted_indices_to_remove
+    )
     scores = logits.masked_fill(indices_to_remove, -float("Inf"))
     return scores
 
@@ -115,7 +115,9 @@ def sample(
     logits = logits[:, -1]
     logits_cond, logits_uncond_spkemb = logits.split(logits.size(0) // 2, dim=0)
     logits = guidance_scale * logits_cond + (1 - guidance_scale) * logits_uncond_spkemb
-    probs = logits_to_probs(logits[0], temperature=temperature, top_p=top_p, top_k=top_k)
+    probs = logits_to_probs(
+        logits[0], temperature=temperature, top_p=top_p, top_k=top_k
+    )
     idx_next = multinomial_sample_one_no_sync(probs)
     return idx_next, probs
 
@@ -163,7 +165,9 @@ def decode_n_tokens(
         with torch.backends.cuda.sdp_kernel(
             enable_flash=False, enable_mem_efficient=False, enable_math=True
         ):  # Actually better for Inductor to codegen attention here
-            next_token, next_prob = decode_one_token(model, cur_token, spk_emb, input_pos, **sampling_kwargs)
+            next_token, next_prob = decode_one_token(
+                model, cur_token, spk_emb, input_pos, **sampling_kwargs
+            )
             input_pos += 1
             new_tokens.append(next_token.clone())
             callback(new_tokens[-1])
@@ -208,7 +212,9 @@ def generate(
     seq = torch.clone(prompt)
     input_pos = torch.arange(0, T, device=device)
 
-    next_token = prefill(model, prompt.view(1, -1).repeat(2, 1), spk_emb, input_pos, **sampling_kwargs)
+    next_token = prefill(
+        model, prompt.view(1, -1).repeat(2, 1), spk_emb, input_pos, **sampling_kwargs
+    )
     seq = torch.cat([seq, next_token.view(1)])
 
     input_pos = torch.tensor([T], device=device, dtype=torch.int)
@@ -228,13 +234,19 @@ def generate(
     return seq
 
 
-def encode_tokens(tokenizer: TrainedBPETokeniser, text: str, device="cuda") -> torch.Tensor:
+def encode_tokens(
+    tokenizer: TrainedBPETokeniser, text: str, device="cuda"
+) -> torch.Tensor:
     tokens = tokenizer.encode(text)
     return torch.tensor(tokens, dtype=torch.int, device=device)
 
 
 def _load_model(
-    checkpoint_path, spk_emb_ckpt_path, device, precision, quantisation_mode: Optional[Literal["int4", "int8"]] = None
+    checkpoint_path,
+    spk_emb_ckpt_path,
+    device,
+    precision,
+    quantisation_mode: Optional[Literal["int4", "int8"]] = None,
 ):
     ##### MODEL
     with torch.device("meta"):
@@ -256,16 +268,22 @@ def _load_model(
             state_dict[k.replace("transformer.h.", "layers.")] = state_dict.pop(k)
             k = k.replace("transformer.h.", "layers.")
         if ".attn.c_attn." in k:
-            state_dict[k.replace(".attn.c_attn.", ".attention.wqkv.")] = state_dict.pop(k)
+            state_dict[k.replace(".attn.c_attn.", ".attention.wqkv.")] = state_dict.pop(
+                k
+            )
             k = k.replace(".attn.c_attn.", ".attention.wqkv.")
         if ".attn.c_proj." in k:
             state_dict[k.replace(".attn.c_proj.", ".attention.wo.")] = state_dict.pop(k)
             k = k.replace(".attn.c_proj.", ".attention.wo.")
         if ".mlp.swiglu.w1." in k:
-            state_dict[k.replace(".mlp.swiglu.w1.", ".feed_forward.swiglu.w1.")] = state_dict.pop(k)
+            state_dict[
+                k.replace(".mlp.swiglu.w1.", ".feed_forward.swiglu.w1.")
+            ] = state_dict.pop(k)
             k = k.replace(".mlp.swiglu.w1.", ".feed_forward.swiglu.w1.")
         if ".mlp.swiglu.w3." in k:
-            state_dict[k.replace(".mlp.swiglu.w3.", ".feed_forward.swiglu.w3.")] = state_dict.pop(k)
+            state_dict[
+                k.replace(".mlp.swiglu.w3.", ".feed_forward.swiglu.w3.")
+            ] = state_dict.pop(k)
             k = k.replace(".mlp.swiglu.w3.", ".feed_forward.swiglu.w3.")
         if ".ln_1." in k:
             state_dict[k.replace(".ln_1.", ".attention_norm.")] = state_dict.pop(k)
@@ -274,7 +292,9 @@ def _load_model(
             state_dict[k.replace(".ln_2.", ".ffn_norm.")] = state_dict.pop(k)
             k = k.replace(".ln_2.", ".ffn_norm.")
         if ".mlp.c_proj." in k:
-            state_dict[k.replace(".mlp.c_proj.", ".feed_forward.w2.")] = state_dict.pop(k)
+            state_dict[k.replace(".mlp.c_proj.", ".feed_forward.w2.")] = state_dict.pop(
+                k
+            )
             k = k.replace(".mlp.c_proj.", ".feed_forward.w2.")
 
     model.load_state_dict(state_dict, assign=True)
@@ -305,7 +325,9 @@ def _load_model(
         model = model.to(device=device, dtype=torch.float16)
         torch.cuda.empty_cache()
     elif quantisation_mode is not None:
-        raise Exception(f"Invalid quantisation mode {quantisation_mode}! Must be either 'int4' or 'int8'!")
+        raise Exception(
+            f"Invalid quantisation mode {quantisation_mode}! Must be either 'int4' or 'int8'!"
+        )
 
     ###### TOKENIZER
     tokenizer_info = checkpoint.get("meta", {}).get("tokenizer", {})
@@ -338,14 +360,23 @@ def build_model(
     print("Loading model ...")
     t0 = time.time()
     model, tokenizer, smodel = _load_model(
-        checkpoint_path, spk_emb_ckpt_path, device, precision, quantisation_mode=quantisation_mode
+        checkpoint_path,
+        spk_emb_ckpt_path,
+        device,
+        precision,
+        quantisation_mode=quantisation_mode,
     )
 
     device_sync(device=device)  # MKG
     print(f"Time to load model: {time.time() - t0:.02f} seconds")
 
     torch.manual_seed(1234)
-    model_size = sum([p.numel() * p.dtype.itemsize for p in itertools.chain(model.parameters(), model.buffers())])
+    model_size = sum(
+        [
+            p.numel() * p.dtype.itemsize
+            for p in itertools.chain(model.parameters(), model.buffers())
+        ]
+    )
 
     with torch.device(device):
         model.setup_spk_cond_mask()
@@ -437,7 +468,9 @@ def main(
     tokens_generated = y.size(0) - prompt_length
     tokens_sec = tokens_generated / t
     aggregate_metrics["tokens_per_sec"].append(tokens_sec)
-    print(f"Time for 1st stage LLM inference: {t:.02f} sec total, {tokens_sec:.02f} tokens/sec")
+    print(
+        f"Time for 1st stage LLM inference: {t:.02f} sec total, {tokens_sec:.02f} tokens/sec"
+    )
     print(f"Bandwidth achieved: {model_size * tokens_sec / 1e9:.02f} GB/s")
     # print(f"Average tokens/sec: {torch.mean(torch.tensor(aggregate_metrics['tokens_per_sec'])).item():.2f}")
     print(f"Memory used: {torch.cuda.max_memory_reserved() / 1e9:.02f} GB\n")

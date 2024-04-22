@@ -17,7 +17,9 @@ from fam.llm.preprocessing.audio_token_mode import get_params_for_mode
 def test_dataset_preprocess_e2e(dataset):
     model_name = "metavoiceio/metavoice-1B-v0.1"
     device = "cuda"
-    mode_params = get_params_for_mode(atm, num_max_audio_tokens_timesteps=num_max_audio_tokens_timesteps)
+    mode_params = get_params_for_mode(
+        atm, num_max_audio_tokens_timesteps=num_max_audio_tokens_timesteps
+    )
 
     _model_dir = snapshot_download(repo_id=model_name)
     checkpoint_path = Path(f"{_model_dir}/first_stage.pt")
@@ -32,7 +34,7 @@ def test_dataset_preprocess_e2e(dataset):
         dataset,
         mode_params["pad_token"],
         mode_params["ctx_window"],
-        device
+        device,
     )
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
     result = next(iter(dataloader))

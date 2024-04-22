@@ -84,7 +84,9 @@ class SelfAttention(nn.Module):
         Raises:
             AssertionError: If the embedding dimension is not divisible by the number of heads.
         """
-        assert config.n_embd % config.n_head == 0, "Embedding dimension must be divisible by number of heads"
+        assert (
+            config.n_embd % config.n_head == 0
+        ), "Embedding dimension must be divisible by number of heads"
 
     def _update_kv_cache(self, q, k, v):
         """
@@ -110,8 +112,16 @@ class SelfAttention(nn.Module):
                 q_time == 1
             ), f"Only one query at a time is supported, but got q_time={q_time} for kv_cache_first_empty_index={self.kv_cache_first_empty_index}"
 
-        self.kv_cache[0, :, self.kv_cache_first_empty_index : self.kv_cache_first_empty_index + q_time] = k
-        self.kv_cache[1, :, self.kv_cache_first_empty_index : self.kv_cache_first_empty_index + q_time] = v
+        self.kv_cache[
+            0,
+            :,
+            self.kv_cache_first_empty_index : self.kv_cache_first_empty_index + q_time,
+        ] = k
+        self.kv_cache[
+            1,
+            :,
+            self.kv_cache_first_empty_index : self.kv_cache_first_empty_index + q_time,
+        ] = v
         self.kv_cache_first_empty_index += q_time
 
         k = self.kv_cache[0, :, : self.kv_cache_first_empty_index]
@@ -137,7 +147,9 @@ class SelfAttention(nn.Module):
         # if kv-caching and causal, for the "prefill" stage, we need to use a causal mask, and
         # use no mask for the "one time step" parts.
         # calculate this before updating kv_caching so we have the right value for kv_cache_first_empty_index
-        is_causal_attn_mask = self.causal and (not self.kv_cache_enabled or self.kv_cache_first_empty_index == 0)
+        is_causal_attn_mask = self.causal and (
+            not self.kv_cache_enabled or self.kv_cache_first_empty_index == 0
+        )
 
         if self.kv_cache_enabled:
             k, v = self._update_kv_cache(q, k, v)
@@ -168,10 +180,16 @@ class SelfAttention(nn.Module):
         Returns:
             The output tensor.
         """
-        B, T, C = x.size()  # batch size, sequence length, embedding dimensionality (n_embd)
+        (
+            B,
+            T,
+            C,
+        ) = x.size()  # batch size, sequence length, embedding dimensionality (n_embd)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        c_x = self.c_attn(x).view(B, T, 3, self.n_head, C // self.n_head)  # (B, T, 3, nh, hs)
+        c_x = self.c_attn(x).view(
+            B, T, 3, self.n_head, C // self.n_head
+        )  # (B, T, 3, nh, hs)
 
         # causal self-attention;
         if self.attn_kernel_type == "torch_attn":
@@ -179,7 +197,9 @@ class SelfAttention(nn.Module):
         else:
             raise Exception(f"Unknown attention kernel type: {self.attn_kernel_type}")
 
-        y = y.contiguous().view(B, T, C)  # re-assemble all head outputs side by side: (B, T, nh, hs) -> (B, T, hs * nh)
+        y = y.contiguous().view(
+            B, T, C
+        )  # re-assemble all head outputs side by side: (B, T, nh, hs) -> (B, T, hs * nh)
         # output projection
         y = self.resid_dropout(self.c_proj(y))
         return y

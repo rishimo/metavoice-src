@@ -61,7 +61,9 @@ class BaseEnhancer(ABC):
     def __call__(self, audio_file: str, output_file: Optional[str] = None) -> str:
         raise NotImplementedError
 
-    def get_output_file(self, audio_file: str, tag: str, ext: Optional[str] = None) -> str:
+    def get_output_file(
+        self, audio_file: str, tag: str, ext: Optional[str] = None
+    ) -> str:
         output_file = make_output_file_path(audio_file, tag, ext=ext)
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         return output_file

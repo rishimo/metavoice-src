@@ -17,7 +17,9 @@ END_OF_TEXT_TOKEN = 1537
 
 def _select_spkemb(spkemb, mask):
     _, examples, _ = spkemb.shape
-    mask = torch.nn.functional.one_hot(mask.long(), num_classes=examples).to(spkemb)  # shape: (batch, time, examples)
+    mask = torch.nn.functional.one_hot(mask.long(), num_classes=examples).to(
+        spkemb
+    )  # shape: (batch, time, examples)
     spkemb = spkemb.transpose(1, 2)  # b ex c -> b c ex
     mask = mask.transpose(1, 2)  # b t ex -> b ex t
     return torch.bmm(spkemb, mask).transpose(1, 2)  # b c t -> b t c
@@ -34,20 +36,24 @@ class GPTConfig:
     dropout: float = 0.0
     spkemb_dropout: float = 0.0
     bias: bool = True  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-    causal: bool = (
-        True  # auto-regressive or not, i.e. whether to have attention mask that prevents attending to future tokens
+    causal: bool = True  # auto-regressive or not, i.e. whether to have attention mask that prevents attending to future tokens
+    spk_emb_on_text: bool = (
+        True  # whether to add speaker embedding conditioning to text tokens or not
     )
-    spk_emb_on_text: bool = True  # whether to add speaker embedding conditioning to text tokens or not
     norm_type: str = "layernorm"  # "rmsnorm" or "layernorm
     rmsnorm_eps: Optional[float] = None  # only used for rmsnorm
     nonlinearity_type: str = "gelu"  # "gelu" or "swiglu"
-    swiglu_multiple_of: Optional[int] = None  # MLP hidden layer (using SwiGLU) will be multiple of this
+    swiglu_multiple_of: Optional[
+        int
+    ] = None  # MLP hidden layer (using SwiGLU) will be multiple of this
     attn_kernel_type: Literal["torch_attn"] = "torch_attn"
     kv_cache_enabled: bool = False  # whether to use key-value cache for attention
 
 
 def _check_speaker_emb_dims(
-    speaker_embs: Union[list, torch.Tensor], expected_speaker_emb_dim: int, expected_batch_size: int
+    speaker_embs: Union[list, torch.Tensor],
+    expected_speaker_emb_dim: int,
+    expected_batch_size: int,
 ) -> Union[torch.Tensor, list]:
     """
     Checks that the speaker embedding dimensions are correct, and reshapes them if necessary.
@@ -68,7 +74,9 @@ def _check_speaker_emb_dims(
         # num_examples is the number of utterances packed into this sequence
         b_se, num_examples, emb_dim = speaker_embs.size()
 
-    assert b_se == expected_batch_size, f"Batch size mismatch: {b_se} != {expected_batch_size}"
+    assert (
+        b_se == expected_batch_size
+    ), f"Batch size mismatch: {b_se} != {expected_batch_size}"
     assert (
         emb_dim == expected_speaker_emb_dim
     ), f"Speaker embedding dimension mismatch: {emb_dim} != {expected_speaker_emb_dim}"
@@ -117,7 +125,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
 
         self.transformer = nn.ModuleDict(
             dict(
-                wtes=nn.ModuleList([nn.Embedding(vsize, config.n_embd) for vsize in config.vocab_sizes]),
+                wtes=nn.ModuleList(
+                    [nn.Embedding(vsize, config.n_embd) for vsize in config.vocab_sizes]
+                ),
                 wpe=nn.Embedding(config.block_size, config.n_embd),
                 drop=nn.Dropout(config.dropout),
                 h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
@@ -125,7 +135,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
             )
         )
         if speaker_emb_dim is not None:
-            self.speaker_cond_pos = nn.Linear(speaker_emb_dim, config.n_embd, bias=False)
+            self.speaker_cond_pos = nn.Linear(
+                speaker_emb_dim, config.n_embd, bias=False
+            )
 
         self.lm_heads = nn.ModuleList()
         if config.target_vocab_sizes is not None:
@@ -133,7 +145,11 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
         else:
             assert config.causal is True
 
-        for vsize in config.vocab_sizes if config.target_vocab_sizes is None else config.target_vocab_sizes:
+        for vsize in (
+            config.vocab_sizes
+            if config.target_vocab_sizes is None
+            else config.target_vocab_sizes
+        ):
             self.lm_heads.append(nn.Linear(config.n_embd, vsize, bias=False))
 
         if config.target_vocab_sizes is None:
@@ -150,7 +166,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
         # apply special scaled init to the residual projections, per GPT-2 paper
         for pn, p in self.named_parameters():
             if pn.endswith("c_proj.weight"):
-                torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
+                torch.nn.init.normal_(
+                    p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer)
+                )
 
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params() / 1e6,))
@@ -175,7 +193,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def _mask_spk_emb_on_text(self, idx: torch.Tensor, spk_emb: torch.Tensor) -> torch.Tensor:
+    def _mask_spk_emb_on_text(
+        self, idx: torch.Tensor, spk_emb: torch.Tensor
+    ) -> torch.Tensor:
         """
         This is in a separate function so we can test it easily.
         """
@@ -205,7 +225,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
 
         if speaker_embs is not None:
             speaker_embs = _check_speaker_emb_dims(
-                speaker_embs=speaker_embs, expected_speaker_emb_dim=self.speaker_emb_dim, expected_batch_size=b
+                speaker_embs=speaker_embs,
+                expected_speaker_emb_dim=self.speaker_emb_dim,
+                expected_batch_size=b,
             )
 
         assert (
@@ -218,7 +240,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
                 self.kv_pos += t
             else:
                 assert t == 1, "KV cache is only supported for single token inputs"
-                pos = torch.tensor([self.kv_pos], dtype=torch.long, device=device)  # shape (1)
+                pos = torch.tensor(
+                    [self.kv_pos], dtype=torch.long, device=device
+                )  # shape (1)
                 self.kv_pos += 1
         else:
             pos = torch.arange(0, t, dtype=torch.long, device=device)  # shape (t)
@@ -245,17 +269,33 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
                 spk_emb = []
                 for speaker_emb_row in speaker_embs:
                     if speaker_emb_row is not None:
-                        spk_emb.append(self.speaker_cond_pos(speaker_emb_row.unsqueeze(0)))
-                        assert spk_emb[-1].shape == (1, 1, self.config.n_embd), f"spk_emb[-1].shape={spk_emb[-1].shape}"
+                        spk_emb.append(
+                            self.speaker_cond_pos(speaker_emb_row.unsqueeze(0))
+                        )
+                        assert spk_emb[-1].shape == (
+                            1,
+                            1,
+                            self.config.n_embd,
+                        ), f"spk_emb[-1].shape={spk_emb[-1].shape}"
                     else:
-                        spk_emb.append(torch.zeros((1, 1, self.config.n_embd), device=device, dtype=pos_emb.dtype))
+                        spk_emb.append(
+                            torch.zeros(
+                                (1, 1, self.config.n_embd),
+                                device=device,
+                                dtype=pos_emb.dtype,
+                            )
+                        )
                 spk_emb = torch.cat(spk_emb, dim=0)
 
                 assert (
-                    spk_emb.ndim == 3 and spk_emb.shape[1] == 1 and spk_emb.shape[0] == b
+                    spk_emb.ndim == 3
+                    and spk_emb.shape[1] == 1
+                    and spk_emb.shape[0] == b
                 ), f"spk_emb.ndim={spk_emb.ndim}, spk_emb.shape={spk_emb.shape}, len(speaker_embs)={len(speaker_embs)}"
             else:
-                speakers_embedded = self.speaker_cond_pos(speaker_embs)  # shape (b, num_examples, c)
+                speakers_embedded = self.speaker_cond_pos(
+                    speaker_embs
+                )  # shape (b, num_examples, c)
 
                 if speaker_emb_mask is not None:
                     spk_emb = _select_spkemb(speakers_embedded, speaker_emb_mask)
@@ -269,12 +309,19 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
                 if self.training and self.config.spkemb_dropout > 0.0:
                     # Remove speaker conditioning at random.
                     dropout = torch.ones_like(speakers_embedded) * (
-                        torch.rand(speakers_embedded.shape[0], 1, 1, device=device) >= self.config.spkemb_dropout
+                        torch.rand(speakers_embedded.shape[0], 1, 1, device=device)
+                        >= self.config.spkemb_dropout
                     )
-                    spk_emb = torch.where(dropout == 0, torch.zeros_like(speakers_embedded), speakers_embedded)
+                    spk_emb = torch.where(
+                        dropout == 0,
+                        torch.zeros_like(speakers_embedded),
+                        speakers_embedded,
+                    )
 
             if self.spk_emb_on_text is False:
-                assert speaker_emb_mask is None, "Not implemented for spk_emb_on_text=False"
+                assert (
+                    speaker_emb_mask is None
+                ), "Not implemented for spk_emb_on_text=False"
                 spk_emb = self._mask_spk_emb_on_text(idx, spk_emb)
 
         x = self.transformer.drop(tok_emb + pos_emb + spk_emb)
@@ -300,7 +347,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
             if loss_reduce == "mean":
                 losses = losses.mean()
             else:
-                losses = rearrange(losses, "h (b t) -> b h t", h=len(self.lm_heads), b=b, t=t)
+                losses = rearrange(
+                    losses, "h (b t) -> b h t", h=len(self.lm_heads), b=b, t=t
+                )
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             if self.config.causal:
@@ -328,13 +377,19 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
         ]
         num_decay_params = sum(p.numel() for p in decay_params)
         num_nodecay_params = sum(p.numel() for p in nodecay_params)
-        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
-        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
+        print(
+            f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters"
+        )
+        print(
+            f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters"
+        )
         # Create AdamW optimizer and use the fused version if it is available
         fused_available = "fused" in inspect.signature(torch.optim.AdamW).parameters
         use_fused = fused_available and device_type == "cuda"
         extra_args = dict(fused=True) if use_fused else dict()
-        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+        optimizer = torch.optim.AdamW(
+            optim_groups, lr=learning_rate, betas=betas, **extra_args
+        )
         print(f"using fused AdamW: {use_fused}")
 
         return optimizer
@@ -364,7 +419,9 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
 
         if self.config.causal:
             if seq_lens is None or batch_size is None:
-                raise Exception("seq_lens and batch_size must be provided for causal sampling")
+                raise Exception(
+                    "seq_lens and batch_size must be provided for causal sampling"
+                )
 
             return self._causal_sample(
                 idx=idx,
@@ -389,18 +446,24 @@ class GPT(nn.Module, NonCausalInferenceMixin, CausalInferenceMixin):
                 raise Exception("batch_size must be provided for non-causal sampling")
 
             if guidance_scale is not None:
-                raise Exception("guidance_scale is not supported for non-causal sampling")
+                raise Exception(
+                    "guidance_scale is not supported for non-causal sampling"
+                )
 
             if top_p is not None:
                 raise Exception("top_p is not supported for non-causal sampling")
 
             out = []
-            for start_index in tqdm.tqdm(range(0, idx.shape[0], batch_size), desc="Non-causal batching"):
+            for start_index in tqdm.tqdm(
+                range(0, idx.shape[0], batch_size), desc="Non-causal batching"
+            ):
                 end_index = min(start_index + batch_size, idx.shape[0])
                 out.append(
                     self._non_causal_sample(
                         idx=idx[start_index:end_index],
-                        speaker_embs=speaker_embs[start_index:end_index] if speaker_embs is not None else None,
+                        speaker_embs=speaker_embs[start_index:end_index]
+                        if speaker_embs is not None
+                        else None,
                         temperature=temperature,
                         top_k=top_k,
                     )

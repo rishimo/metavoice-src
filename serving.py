@@ -116,7 +116,9 @@ def _convert_audiodata_to_wav_path(audiodata, wav_tmp):
 
         subprocess.check_output(
             # arbitrary 2 minute cutoff
-            shlex.split(f"ffmpeg -t 120 -y -i {unknown_format_tmp.name} -f wav {wav_tmp.name}")
+            shlex.split(
+                f"ffmpeg -t 120 -y -i {unknown_format_tmp.name} -f wav {wav_tmp.name}"
+            )
         )
 
         return wav_tmp.name
@@ -129,11 +131,18 @@ if __name__ == "__main__":
     logging.root.setLevel(logging.INFO)
 
     GlobalState.config = tyro.cli(ServingConfig)
-    GlobalState.tts = TTS(seed=GlobalState.config.seed, quantisation_mode=GlobalState.config.quantisation_mode)
+    GlobalState.tts = TTS(
+        seed=GlobalState.config.seed,
+        quantisation_mode=GlobalState.config.quantisation_mode,
+    )
 
     app.add_middleware(
         fastapi.middleware.cors.CORSMiddleware,
-        allow_origins=["*", f"http://localhost:{GlobalState.config.port}", "http://localhost:3000"],
+        allow_origins=[
+            "*",
+            f"http://localhost:{GlobalState.config.port}",
+            "http://localhost:3000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

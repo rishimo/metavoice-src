@@ -15,7 +15,9 @@ def pad_tokens(tokens: np.ndarray, context_window: int, pad_token: int) -> np.nd
         tokens = tokens[..., : context_window + 1]
     elif example_length < context_window + 1:
         # Pad
-        padding = np.full(tokens.shape[:-1] + (context_window + 1 - example_length,), pad_token)
+        padding = np.full(
+            tokens.shape[:-1] + (context_window + 1 - example_length,), pad_token
+        )
         tokens = np.concatenate([tokens, padding], axis=-1)
     assert tokens.shape[-1] == context_window + 1
     return tokens
@@ -30,7 +32,9 @@ def get_training_tuple(
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
     # batch contains combined tokens as specified by audio_token_mode
     if causal:
-        num_codebooks = batch["tokens"].shape[1] if num_codebooks is None else num_codebooks
+        num_codebooks = (
+            batch["tokens"].shape[1] if num_codebooks is None else num_codebooks
+        )
         x = batch["tokens"][:, :num_codebooks, :-1]
         y = batch["tokens"][:, :num_codebooks, 1:]
 
@@ -50,7 +54,10 @@ def pad_with_values(tensor, batch_size, value):
             [
                 tensor,
                 torch.full(
-                    (batch_size - tensor.shape[0], *tensor.shape[1:]), value, dtype=tensor.dtype, device=tensor.device
+                    (batch_size - tensor.shape[0], *tensor.shape[1:]),
+                    value,
+                    dtype=tensor.dtype,
+                    device=tensor.device,
                 ),
             ]
         )

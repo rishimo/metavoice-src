@@ -72,14 +72,20 @@ class ModelArgs:
             self.intermediate_size = find_multiple(n_hidden, 256)
         self.head_dim = self.dim // self.n_head
 
-        self.dtype = {"float16": torch.float16, "float16": torch.float16}[get_default_dtype()]
+        self.dtype = {"float16": torch.float16, "float16": torch.float16}[
+            get_default_dtype()
+        ]
 
     @classmethod
     def from_name(cls, name: str):
         if name in transformer_configs:
             return cls(**transformer_configs[name])
         # fuzzy search
-        config = [config for config in transformer_configs if config in str(name).upper() or config in str(name)]
+        config = [
+            config
+            for config in transformer_configs
+            if config in str(name).upper() or config in str(name)
+        ]
         assert len(config) == 1, name
         return cls(**transformer_configs[config[0]])
 
@@ -120,8 +126,12 @@ class Transformer(nn.Module):
 
         self.tok_embeddings = nn.Embedding(config.vocab_size, config.dim)
         self.pos_embeddings = nn.Embedding(config.block_size, config.dim)
-        self.speaker_cond_pos = nn.Linear(config.speaker_emb_dim, config.dim, bias=False)
-        self.layers = nn.ModuleList(TransformerBlock(config) for _ in range(config.n_layer))
+        self.speaker_cond_pos = nn.Linear(
+            config.speaker_emb_dim, config.dim, bias=False
+        )
+        self.layers = nn.ModuleList(
+            TransformerBlock(config) for _ in range(config.n_layer)
+        )
         self.norm = RMSNorm(config.dim, eps=config.norm_eps)
         self.output = nn.Linear(config.dim, config.vocab_size, bias=False)
 
@@ -134,7 +144,10 @@ class Transformer(nn.Module):
         self.spk_cond_mask[0] = 1
 
     def setup_caches(self, max_batch_size, max_seq_length):
-        if self.max_seq_length >= max_seq_length and self.max_batch_size >= max_batch_size:
+        if (
+            self.max_seq_length >= max_seq_length
+            and self.max_batch_size >= max_batch_size
+        ):
             return
         head_dim = self.config.dim // self.config.n_head
         max_seq_length = find_multiple(max_seq_length, 8)
@@ -142,10 +155,16 @@ class Transformer(nn.Module):
         self.max_batch_size = max_batch_size
         for b in self.layers:
             b.attention.kv_cache = KVCache(
-                max_batch_size, max_seq_length, self.config.n_local_heads, head_dim, dtype=self.config.dtype
+                max_batch_size,
+                max_seq_length,
+                self.config.n_local_heads,
+                head_dim,
+                dtype=self.config.dtype,
             )
 
-        self.causal_mask = torch.tril(torch.ones(self.max_seq_length, self.max_seq_length, dtype=torch.bool))
+        self.causal_mask = torch.tril(
+            torch.ones(self.max_seq_length, self.max_seq_length, dtype=torch.bool)
+        )
 
     def forward(self, idx: Tensor, spk_emb: Tensor, input_pos: Tensor) -> Tensor:
         mask = self.causal_mask[None, None, input_pos]

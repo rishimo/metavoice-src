@@ -14,7 +14,12 @@ mbd = MultiBandDiffusion.get_mbd_24khz(bw=6)  # 1.5
 
 class Decoder(ABC):
     @abstractmethod
-    def decode(self, tokens: list[int], ref_audio_path: Optional[str] = None, causal: Optional[bool] = None):
+    def decode(
+        self,
+        tokens: list[int],
+        ref_audio_path: Optional[str] = None,
+        causal: Optional[bool] = None,
+    ):
         raise NotImplementedError
 
 
@@ -63,7 +68,10 @@ class EncodecDecoder(Decoder):
         return tokens.tolist()
 
     def decode(
-        self, tokens: list[list[int]], causal: bool = True, ref_audio_path: Optional[str] = None
+        self,
+        tokens: list[list[int]],
+        causal: bool = True,
+        ref_audio_path: Optional[str] = None,
     ) -> Union[str, torch.Tensor]:
         # TODO: this has strange behaviour -- if causal is True, it returns tokens. if causal is False, it SAVES the audio file.
         text_ids, extracted_audio_ids = self._data_adapter_fn(tokens)
@@ -74,7 +82,12 @@ class EncodecDecoder(Decoder):
 
         if tokens.shape[1] < self._num_codebooks:
             tokens = torch.cat(
-                [tokens, *[torch.ones_like(tokens[0:1, 0:1]) * 0] * (self._num_codebooks - tokens.shape[1])], dim=1
+                [
+                    tokens,
+                    *[torch.ones_like(tokens[0:1, 0:1]) * 0]
+                    * (self._num_codebooks - tokens.shape[1]),
+                ],
+                dim=1,
             )
 
         if causal:
@@ -90,7 +103,9 @@ class EncodecDecoder(Decoder):
             raise Exception("wav predicted is shorter than 400ms!")
 
         try:
-            wav_file_name = self.output_dir / f"synth_{text.replace(' ', '_')[:25]}_{uuid.uuid4()}"
+            wav_file_name = (
+                self.output_dir / f"synth_{text.replace(' ', '_')[:25]}_{uuid.uuid4()}"
+            )
             self._save_audio(wav_file_name, wav)
             return wav_file_name
         except Exception as e:

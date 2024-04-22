@@ -79,7 +79,11 @@ class CausalInferenceMixin:
             raise ValueError("Only one of top_k and top_p can be set")
 
         # if the sequence context is growing too long we must crop it at block_size
-        idx_cond = idx if idx.size(-1) <= self.config.block_size else idx[:, :, -self.config.block_size :]
+        idx_cond = (
+            idx
+            if idx.size(-1) <= self.config.block_size
+            else idx[:, :, -self.config.block_size :]
+        )
 
         # forward the model to get the logits for the index in the sequence
         list_logits, _ = self(
@@ -94,9 +98,15 @@ class CausalInferenceMixin:
 
             for i, logits in enumerate(list_logits):
                 if prompt_guidance_scale > 1:
-                    logits_cond, logits_uncond_spkemb, logits_uncond_prompt = logits.split(logits.shape[0] // 3, dim=0)
+                    (
+                        logits_cond,
+                        logits_uncond_spkemb,
+                        logits_uncond_prompt,
+                    ) = logits.split(logits.shape[0] // 3, dim=0)
                 else:
-                    logits_cond, logits_uncond_spkemb = logits.split(logits.shape[0] // 2, dim=0)
+                    logits_cond, logits_uncond_spkemb = logits.split(
+                        logits.shape[0] // 2, dim=0
+                    )
                     logits_uncond_prompt = 0
                 list_logits[i] = (
                     (base_scale) * logits_cond
@@ -116,7 +126,9 @@ class CausalInferenceMixin:
                 v, _ = torch.topk(
                     logits, min(top_k, logits.size(-1))
                 )  # returns a descending sorted list of values and indices of top_k values
-                logits[logits < v[:, [-1]]] = -float("Inf")  # set all logits below the smallest top_k value to -Inf
+                logits[logits < v[:, [-1]]] = -float(
+                    "Inf"
+                )  # set all logits below the smallest top_k value to -Inf
                 list_logits[i] = logits
 
         # apply softmax to convert logits to (normalized) probabilities
@@ -137,7 +149,9 @@ class CausalInferenceMixin:
         return idx_next  # (b, num_hierarchies) tensor
 
     @torch.no_grad()
-    def _create_token_pred_mask(self, idx: torch.Tensor, seq_lens: list[int]) -> torch.Tensor:
+    def _create_token_pred_mask(
+        self, idx: torch.Tensor, seq_lens: list[int]
+    ) -> torch.Tensor:
         """
         Creates a token prediction mask based on sequence lengths.
 
@@ -148,7 +162,9 @@ class CausalInferenceMixin:
         Returns:
             torch.Tensor: Token prediction mask of shape (batch, time).
         """
-        token_pred_mask = torch.zeros((idx.shape[0], idx.shape[-1]), dtype=torch.bool, device=idx.device)
+        token_pred_mask = torch.zeros(
+            (idx.shape[0], idx.shape[-1]), dtype=torch.bool, device=idx.device
+        )
         for i in range(len(seq_lens)):
             token_pred_mask[i, : seq_lens[i]] = True
 
@@ -158,7 +174,11 @@ class CausalInferenceMixin:
 
     @torch.no_grad()
     def _apply_token_pred_mask(
-        self, *, idx_next: torch.Tensor, orig_input_at_t: torch.Tensor, token_pred_mask_at_t: torch.Tensor
+        self,
+        *,
+        idx_next: torch.Tensor,
+        orig_input_at_t: torch.Tensor,
+        token_pred_mask_at_t: torch.Tensor,
     ) -> torch.Tensor:
         """
         Applies a token prediction mask to the next token predictions.
@@ -171,7 +191,9 @@ class CausalInferenceMixin:
         Returns:
             torch.Tensor: Updated next token predictions after applying the token prediction mask.
         """
-        idx_next = idx_next * (~token_pred_mask_at_t) + orig_input_at_t * token_pred_mask_at_t
+        idx_next = (
+            idx_next * (~token_pred_mask_at_t) + orig_input_at_t * token_pred_mask_at_t
+        )
 
         return idx_next
 
@@ -234,7 +256,9 @@ class CausalInferenceMixin:
                 + (list(speaker_embs) if prompt_guidance_scale > 1 else [])
             )
 
-        for timestep in tqdm.tqdm(range(min_seq_lens, min_seq_lens + max_new_tokens), desc="tokens: "):
+        for timestep in tqdm.tqdm(
+            range(min_seq_lens, min_seq_lens + max_new_tokens), desc="tokens: "
+        ):
             if terminated.all():
                 break
             if (self.kv_cache_enabled is True) and (timestep > min_seq_lens):
@@ -246,7 +270,9 @@ class CausalInferenceMixin:
                 _, prompt_guidance_scale = guidance_scale
                 # TODO: fix: will cause a problem with kv-caching as it's not expecting larger batch-size.
                 if timestep == min_seq_lens:
-                    print("[hack!!!!] Guidance is on, so we're doubling/tripling batch size!")
+                    print(
+                        "[hack!!!!] Guidance is on, so we're doubling/tripling batch size!"
+                    )
 
                 # replicate idx in the batch dimension
                 idx_input = (
@@ -259,7 +285,9 @@ class CausalInferenceMixin:
                     idx_input_uncond = idx_input[idx_input.shape[0] // 3 * 2 :]
                     idx_input_uncond = idx_input_uncond.view(-1)
                     # Replace all text tokens with endoftext token
-                    idx_input_uncond[idx_input_uncond > end_of_audio_token] = end_of_text_token
+                    idx_input_uncond[
+                        idx_input_uncond > end_of_audio_token
+                    ] = end_of_text_token
 
             idx_next = self._sample_next_token(
                 idx=idx_input,
@@ -295,7 +323,9 @@ class CausalInferenceMixin:
         speaker_embs: Optional[torch.Tensor],
         batch_size: int,
         max_new_tokens: int,
-    ) -> Tuple[list[int], list[int], torch.Tensor, list[int], Optional[torch.Tensor], int]:
+    ) -> Tuple[
+        list[int], list[int], torch.Tensor, list[int], Optional[torch.Tensor], int
+    ]:
         """
         Sorts the input sequences for efficient batching.
 
@@ -320,11 +350,15 @@ class CausalInferenceMixin:
 
         sorted_indices = np.argsort(seq_lens)
         inverted_sorted_indices = np.zeros(len(seq_lens), dtype=np.int32)
-        inverted_sorted_indices[sorted_indices] = np.arange(len(seq_lens), dtype=np.int32)
+        inverted_sorted_indices[sorted_indices] = np.arange(
+            len(seq_lens), dtype=np.int32
+        )
 
         idx = idx[sorted_indices]
         seq_lens = [seq_lens[i] for i in sorted_indices]
-        speaker_embs = speaker_embs[sorted_indices] if speaker_embs is not None else None
+        speaker_embs = (
+            speaker_embs[sorted_indices] if speaker_embs is not None else None
+        )
         max_token_len = 0
 
         # figure out effective max_tokens to generate
@@ -335,7 +369,14 @@ class CausalInferenceMixin:
             # # TODO: fix!
             max_token_len = max(max_token_len, min(batch_seq_lens) + max_new_tokens)
 
-        return sorted_indices, inverted_sorted_indices, idx, seq_lens, speaker_embs, max_token_len
+        return (
+            sorted_indices,
+            inverted_sorted_indices,
+            idx,
+            seq_lens,
+            speaker_embs,
+            max_token_len,
+        )
 
     @torch.no_grad()
     def _causal_sample(
@@ -379,12 +420,22 @@ class CausalInferenceMixin:
             speaker_embs,
             max_token_len,
         ) = self._sort_for_batching(
-            idx=idx, seq_lens=seq_lens, speaker_embs=speaker_embs, batch_size=batch_size, max_new_tokens=max_new_tokens
+            idx=idx,
+            seq_lens=seq_lens,
+            speaker_embs=speaker_embs,
+            batch_size=batch_size,
+            max_new_tokens=max_new_tokens,
         )
 
-        return_idx = torch.zeros((len(seq_lens), idx.size(1), max_token_len), dtype=torch.long, device=idx.device)
+        return_idx = torch.zeros(
+            (len(seq_lens), idx.size(1), max_token_len),
+            dtype=torch.long,
+            device=idx.device,
+        )
 
-        for start_index in tqdm.tqdm(range(0, len(seq_lens), batch_size), desc="batch: "):
+        for start_index in tqdm.tqdm(
+            range(0, len(seq_lens), batch_size), desc="batch: "
+        ):
             end_index = min(start_index + batch_size, len(seq_lens))
 
             kv_batch_size = end_index - start_index
@@ -405,7 +456,11 @@ class CausalInferenceMixin:
             batch_max_new_tokens = max_token_len - min(batch_seq_lens)
 
             batch_idx = idx[start_index:end_index]
-            batch_speaker_embs = speaker_embs[start_index:end_index] if speaker_embs is not None else None
+            batch_speaker_embs = (
+                speaker_embs[start_index:end_index]
+                if speaker_embs is not None
+                else None
+            )
 
             batch_idx = self._sample_batch(
                 idx=batch_idx,
@@ -423,7 +478,9 @@ class CausalInferenceMixin:
 
         return return_idx[invert_sorted_indices]
 
-    def empty_kv_cache(self, *, batch_size: int, kv_cache_maxlen: int, dtype: torch.dtype):
+    def empty_kv_cache(
+        self, *, batch_size: int, kv_cache_maxlen: int, dtype: torch.dtype
+    ):
         """
         Empties key-value (KV) cache for causal attention.
 
@@ -443,7 +500,9 @@ class CausalInferenceMixin:
 
         self.kv_pos = 0
         for block in self.transformer.h:
-            block.attn.empty_kv_cache(batch_size=batch_size, kv_cache_maxlen=kv_cache_maxlen, dtype=dtype)
+            block.attn.empty_kv_cache(
+                batch_size=batch_size, kv_cache_maxlen=kv_cache_maxlen, dtype=dtype
+            )
 
     def enable_kv_cache(self):
         """
@@ -490,7 +549,9 @@ class CausalInferenceMixin:
         """
         assert idx.dim() == 3, "idx must be a batch of sequences of hierarchical tokens"
         assert idx.size(0) == 1, "can only do one sequence at a time for now"
-        assert top_p is None, "nucleus sampling not supported yet with _slow_causal_sampling_loop"
+        assert (
+            top_p is None
+        ), "nucleus sampling not supported yet with _slow_causal_sampling_loop"
 
         if self.config.causal is not True:
             raise Exception("Causal sampling is only supported for causal models")
@@ -505,7 +566,11 @@ class CausalInferenceMixin:
 
         for i in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
-            idx_cond = idx if idx.size(-1) <= self.config.block_size else idx[:, -self.config.block_size :]
+            idx_cond = (
+                idx
+                if idx.size(-1) <= self.config.block_size
+                else idx[:, -self.config.block_size :]
+            )
 
             if self.kv_cache_enabled:
                 if i > 0:
@@ -538,7 +603,8 @@ class CausalInferenceMixin:
             probs = [F.softmax(logits, dim=-1) for logits in list_logits]
             # sample from the distribution
             idx_next = torch.tensor(
-                [torch.multinomial(prob, num_samples=1) for prob in probs], device=idx.device
+                [torch.multinomial(prob, num_samples=1) for prob in probs],
+                device=idx.device,
             )  # (c, 1)
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next.unsqueeze(0).unsqueeze(-1)), dim=2)

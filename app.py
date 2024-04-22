@@ -43,7 +43,9 @@ def _check_file_size(path):
     filesize = os.path.getsize(path)
     filesize_mb = filesize / 1024 / 1024
     if filesize_mb >= 50:
-        raise gr.Error(f"Please upload a sample less than 20MB for voice cloning. Provided: {round(filesize_mb)} MB")
+        raise gr.Error(
+            f"Please upload a sample less than 20MB for voice cloning. Provided: {round(filesize_mb)} MB"
+        )
 
 
 def _handle_edge_cases(to_say, upload_target):
@@ -73,7 +75,9 @@ def tts(to_say, top_p, guidance, toggle, preset_dropdown, upload_target):
 
         return TTS_MODEL.synthesise(
             text=to_say,
-            spk_ref_path=PRESET_VOICES[preset_dropdown] if toggle == RADIO_CHOICES[0] else upload_target,
+            spk_ref_path=PRESET_VOICES[preset_dropdown]
+            if toggle == RADIO_CHOICES[0]
+            else upload_target,
             top_p=d_top_p,
             guidance_scale=d_guidance,
         )
@@ -140,11 +144,15 @@ with gr.Blocks(title="TTS by MetaVoice") as demo:
                 )
 
                 # voice select
-                toggle = gr.Radio(choices=RADIO_CHOICES, label="Choose voice", value=RADIO_CHOICES[0])
+                toggle = gr.Radio(
+                    choices=RADIO_CHOICES, label="Choose voice", value=RADIO_CHOICES[0]
+                )
 
             with gr.Row(visible=True) as row_1:
                 preset_dropdown = gr.Dropdown(
-                    PRESET_VOICES.keys(), label="Preset voices", value=list(PRESET_VOICES.keys())[0]
+                    PRESET_VOICES.keys(),
+                    label="Preset voices",
+                    value=list(PRESET_VOICES.keys())[0],
                 )
                 with gr.Accordion("Preview: Preset voices", open=False):
                     for label, path in PRESET_VOICES.items():
@@ -179,7 +187,9 @@ with gr.Blocks(title="TTS by MetaVoice") as demo:
 
 demo.queue()
 demo.launch(
-    favicon_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets/favicon.ico"),
+    favicon_path=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "assets/favicon.ico"
+    ),
     server_name="0.0.0.0",
     server_port=7861,
 )

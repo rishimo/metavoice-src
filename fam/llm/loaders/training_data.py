@@ -52,7 +52,7 @@ class DynamicComputeDataset(Dataset):
         dataset_dir: Path | str,
         pad_token: int,
         ctx_window: int,
-        device: str
+        device: str,
     ):
         encodec = EncodecModel.encodec_model_24khz().to(device)
         encodec.set_target_bandwidth(ENCODEC_BANDWIDTH)
@@ -72,7 +72,7 @@ class DynamicComputeDataset(Dataset):
             combiner,
             pad_token,
             ctx_window,
-            device
+            device,
         )
 
     def __len__(self):
@@ -112,5 +112,7 @@ class DynamicComputeDataset(Dataset):
         return _tokens
 
     def _extract_speaker_embedding(self, audio_path: str):
-        emb = self.spkemb_model.embed_utterance_from_file(audio_path, numpy=False)  # shape = [256,]
+        emb = self.spkemb_model.embed_utterance_from_file(
+            audio_path, numpy=False
+        )  # shape = [256,]
         return emb.unsqueeze(0).detach()

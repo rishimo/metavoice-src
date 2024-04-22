@@ -83,7 +83,9 @@ def get_group_qparams(w, n_bit=4, groupsize=128):
     max_int = 2**n_bit - 1
     scales = (max_val - min_val).clamp(min=1e-6) / max_int
     zeros = min_val + scales * (2 ** (n_bit - 1))
-    return scales.to(torch.float16).reshape(w.shape[0], -1), zeros.to(torch.float16).reshape(w.shape[0], -1)
+    return scales.to(torch.float16).reshape(w.shape[0], -1), zeros.to(
+        torch.float16
+    ).reshape(w.shape[0], -1)
 
 
 def pack_scales_and_zeros(scales, zeros):
@@ -120,7 +122,14 @@ def group_quantize_tensor_from_qparams(w, scales, zeros, n_bit=4, groupsize=128)
     min_val = zeros - scales * (2 ** (n_bit - 1))
     max_int = 2**n_bit - 1
     min_int = 0
-    w_int32 = to_quant.sub(min_val).div(scales).round().clamp_(min_int, max_int).to(torch.int32).reshape_as(w)
+    w_int32 = (
+        to_quant.sub(min_val)
+        .div(scales)
+        .round()
+        .clamp_(min_int, max_int)
+        .to(torch.int32)
+        .reshape_as(w)
+    )
 
     return w_int32
 
@@ -132,7 +141,9 @@ def group_quantize_tensor(w, n_bit=4, groupsize=128):
     return w_int32, scales_and_zeros
 
 
-def group_dequantize_tensor_from_qparams(w_int32, scales, zeros, n_bit=4, groupsize=128):
+def group_dequantize_tensor_from_qparams(
+    w_int32, scales, zeros, n_bit=4, groupsize=128
+):
     assert groupsize > 1
     # needed for GPTQ single column dequantize
     if groupsize > w_int32.shape[-1] and scales.shape[-1] == 1:
@@ -144,7 +155,9 @@ def group_dequantize_tensor_from_qparams(w_int32, scales, zeros, n_bit=4, groups
     scales = scales.reshape(-1, 1)
     zeros = zeros.reshape(-1, 1)
 
-    w_dq = w_int32_grouped.sub(2 ** (n_bit - 1)).mul(scales).add(zeros).reshape_as(w_int32)
+    w_dq = (
+        w_int32_grouped.sub(2 ** (n_bit - 1)).mul(scales).add(zeros).reshape_as(w_int32)
+    )
     return w_dq
 
 
@@ -154,7 +167,11 @@ def group_dequantize_tensor_from_qparams(w_int32, scales, zeros, n_bit=4, groups
 def replace_linear_weight_only_int8_per_channel(module):
     for name, child in module.named_children():
         if isinstance(child, nn.Linear):
-            setattr(module, name, WeightOnlyInt8Linear(child.in_features, child.out_features))
+            setattr(
+                module,
+                name,
+                WeightOnlyInt8Linear(child.in_features, child.out_features),
+            )
         else:
             replace_linear_weight_only_int8_per_channel(child)
 
@@ -169,7 +186,9 @@ class WeightOnlyInt8QuantHandler:
         for fqn, mod in self.mod.named_modules():
             # TODO: quantise RMSNorm as well.
             if isinstance(mod, torch.nn.Linear):
-                int8_weight, scales, _ = dynamically_quantize_per_channel(mod.weight.float(), -128, 127, torch.int8)
+                int8_weight, scales, _ = dynamically_quantize_per_channel(
+                    mod.weight.float(), -128, 127, torch.int8
+                )
                 cur_state_dict[f"{fqn}.weight"] = int8_weight.to("cpu")
                 cur_state_dict[f"{fqn}.scales"] = scales.to(mod.weight.dtype).to("cpu")
 
@@ -186,12 +205,21 @@ class WeightOnlyInt8Linear(torch.nn.Module):
     out_features: int
     weight: torch.Tensor
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=None) -> None:
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+    ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.register_buffer("weight", torch.empty((out_features, in_features), dtype=torch.int8))
+        self.register_buffer(
+            "weight", torch.empty((out_features, in_features), dtype=torch.int8)
+        )
         self.register_buffer("scales", torch.ones(out_features, dtype=torch.float16))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -202,15 +230,21 @@ class WeightOnlyInt8Linear(torch.nn.Module):
 
 
 def prepare_int4_weight_and_scales_and_zeros(weight_bf16, groupsize, inner_k_tiles):
-    weight_int32, scales_and_zeros = group_quantize_tensor(weight_bf16, n_bit=4, groupsize=groupsize)
-    weight_int4pack = torch.ops.aten._convert_weight_to_int4pack(weight_int32, inner_k_tiles)
+    weight_int32, scales_and_zeros = group_quantize_tensor(
+        weight_bf16, n_bit=4, groupsize=groupsize
+    )
+    weight_int4pack = torch.ops.aten._convert_weight_to_int4pack(
+        weight_int32, inner_k_tiles
+    )
     return weight_int4pack, scales_and_zeros
 
 
 def linear_forward_int4(x, weight_int4pack, scales_and_zeros, out_features, groupsize):
     origin_x_size = x.size()
     x = x.reshape(-1, origin_x_size[-1])
-    c = torch.ops.aten._weight_int4pack_mm(x, weight_int4pack, groupsize, scales_and_zeros)
+    c = torch.ops.aten._weight_int4pack_mm(
+        x, weight_int4pack, groupsize, scales_and_zeros
+    )
     new_shape = origin_x_size[:-1] + (out_features,)
     c = c.reshape(new_shape)
     return c
@@ -278,21 +312,30 @@ class WeightOnlyInt4QuantHandler:
                 print(f"linear: {fqn}, in={in_features}, out={out_features}")
 
                 weight = mod.weight.data
-                if not _check_linear_int4_k(in_features, self.groupsize, self.inner_k_tiles):
+                if not _check_linear_int4_k(
+                    in_features, self.groupsize, self.inner_k_tiles
+                ):
                     if self.padding:
                         import torch.nn.functional as F
                         from model import find_multiple
 
-                        print(f"warning: {fqn} is padded to satisfy in_features % 1024 == 0")
+                        print(
+                            f"warning: {fqn} is padded to satisfy in_features % 1024 == 0"
+                        )
                         padded_in_features = find_multiple(in_features, 1024)
-                        weight = F.pad(weight, pad=(0, padded_in_features - in_features))
+                        weight = F.pad(
+                            weight, pad=(0, padded_in_features - in_features)
+                        )
                     else:
                         print(
                             f"warning: {fqn} is skipped, int4 requires that in_features is 32, 64, or is divisible by 1024, "
                             + "and that groupsize and inner_k_tiles*16 evenly divide into it"
                         )
                         continue
-                weight_int4pack, scales_and_zeros = prepare_int4_weight_and_scales_and_zeros(
+                (
+                    weight_int4pack,
+                    scales_and_zeros,
+                ) = prepare_int4_weight_and_scales_and_zeros(
                     weight.to(torch.float16), self.groupsize, self.inner_k_tiles
                 )
                 cur_state_dict[f"{fqn}.weight"] = weight_int4pack.to("cpu")
@@ -301,7 +344,9 @@ class WeightOnlyInt4QuantHandler:
         return cur_state_dict
 
     def convert_for_runtime(self, use_cuda):
-        replace_linear_int4(self.mod, self.groupsize, self.inner_k_tiles, self.padding, use_cuda)
+        replace_linear_int4(
+            self.mod, self.groupsize, self.inner_k_tiles, self.padding, use_cuda
+        )
         return self.mod
 
 
@@ -338,18 +383,32 @@ class WeightOnlyInt4Linear(torch.nn.Module):
         self.inner_k_tiles = inner_k_tiles
 
         assert out_features % 8 == 0, "require out_features % 8 == 0"
-        assert in_features % (inner_k_tiles * 16) == 0, "require in_features % (innerKTiles * 16) == 0"
+        assert (
+            in_features % (inner_k_tiles * 16) == 0
+        ), "require in_features % (innerKTiles * 16) == 0"
         if use_cuda:
             self.register_buffer(
                 "weight",
                 torch.empty(
-                    (out_features // 8, in_features // (inner_k_tiles * 16), 32, inner_k_tiles // 2), dtype=torch.int32
+                    (
+                        out_features // 8,
+                        in_features // (inner_k_tiles * 16),
+                        32,
+                        inner_k_tiles // 2,
+                    ),
+                    dtype=torch.int32,
                 ),
             )
         else:
-            self.register_buffer("weight", torch.empty((out_features, in_features // 2), dtype=torch.uint8))
+            self.register_buffer(
+                "weight",
+                torch.empty((out_features, in_features // 2), dtype=torch.uint8),
+            )
         self.register_buffer(
-            "scales_and_zeros", torch.empty((in_features // groupsize, out_features, 2), dtype=torch.float16)
+            "scales_and_zeros",
+            torch.empty(
+                (in_features // groupsize, out_features, 2), dtype=torch.float16
+            ),
         )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -358,4 +417,6 @@ class WeightOnlyInt4Linear(torch.nn.Module):
             import torch.nn.functional as F
 
             input = F.pad(input, pad=(0, self.in_features - self.origin_in_features))
-        return linear_forward_int4(input, self.weight, self.scales_and_zeros, self.out_features, self.groupsize)
+        return linear_forward_int4(
+            input, self.weight, self.scales_and_zeros, self.out_features, self.groupsize
+        )

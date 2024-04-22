@@ -67,11 +67,15 @@ class TTS:
         self._dtype = get_default_dtype()
         self._device = get_device()
         self._model_dir = snapshot_download(repo_id=model_name)
-        self.first_stage_adapter = FlattenedInterleavedEncodec2Codebook(end_of_audio_token=self.END_OF_AUDIO_TOKEN)
+        self.first_stage_adapter = FlattenedInterleavedEncodec2Codebook(
+            end_of_audio_token=self.END_OF_AUDIO_TOKEN
+        )
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         if first_stage_path:
-            print(f"Overriding first stage checkpoint via provided model: {first_stage_path}")
+            print(
+                f"Overriding first stage checkpoint via provided model: {first_stage_path}"
+            )
         self._first_stage_ckpt = first_stage_path or f"{self._model_dir}/first_stage.pt"
 
         second_stage_ckpt_path = f"{self._model_dir}/second_stage.pt"
@@ -85,13 +89,20 @@ class TTS:
             init_from="resume",
             output_dir=self.output_dir,
         )
-        data_adapter_second_stage = TiltedEncodec(end_of_audio_token=self.END_OF_AUDIO_TOKEN)
+        data_adapter_second_stage = TiltedEncodec(
+            end_of_audio_token=self.END_OF_AUDIO_TOKEN
+        )
         self.llm_second_stage = Model(
-            config_second_stage, TrainedBPETokeniser, EncodecDecoder, data_adapter_fn=data_adapter_second_stage.decode
+            config_second_stage,
+            TrainedBPETokeniser,
+            EncodecDecoder,
+            data_adapter_fn=data_adapter_second_stage.decode,
         )
         self.enhancer = get_enhancer("df")
 
-        self.precision = {"float16": torch.float16, "float16": torch.float16}[self._dtype]
+        self.precision = {"float16": torch.float16, "float16": torch.float16}[
+            self._dtype
+        ]
         self.model, self.tokenizer, self.smodel, self.model_size = build_model(
             precision=self.precision,
             checkpoint_path=Path(self._first_stage_ckpt),
@@ -105,7 +116,14 @@ class TTS:
         self._quantisation_mode = quantisation_mode
         self._model_name = model_name
 
-    def synthesise(self, text: str, spk_ref_path: str, top_p=0.95, guidance_scale=3.0, temperature=1.0) -> str:
+    def synthesise(
+        self,
+        text: str,
+        spk_ref_path: str,
+        top_p=0.95,
+        guidance_scale=3.0,
+        temperature=1.0,
+    ) -> str:
         """
         text: Text to speak
         spk_ref_path: Path to speaker reference file. Min. 30s of audio required. Supports both local paths & public URIs. Audio formats: wav, flac & mp3
@@ -132,8 +150,12 @@ class TTS:
             prompt=text,
             spk_emb=spk_emb,
             top_p=torch.tensor(top_p, device=self._device, dtype=self.precision),
-            guidance_scale=torch.tensor(guidance_scale, device=self._device, dtype=self.precision),
-            temperature=torch.tensor(temperature, device=self._device, dtype=self.precision),
+            guidance_scale=torch.tensor(
+                guidance_scale, device=self._device, dtype=self.precision
+            ),
+            temperature=torch.tensor(
+                temperature, device=self._device, dtype=self.precision
+            ),
         )
         _, extracted_audio_ids = self.first_stage_adapter.decode([tokens])
 
@@ -142,7 +164,11 @@ class TTS:
         # second stage LLM + multi-band diffusion model
         wav_files = self.llm_second_stage(
             texts=[text],
-            encodec_tokens=[torch.tensor(extracted_audio_ids, dtype=torch.int32, device=self._device).unsqueeze(0)],
+            encodec_tokens=[
+                torch.tensor(
+                    extracted_audio_ids, dtype=torch.int32, device=self._device
+                ).unsqueeze(0)
+            ],
             speaker_embs=b_speaker_embs,
             batch_size=1,
             guidance_scale=None,

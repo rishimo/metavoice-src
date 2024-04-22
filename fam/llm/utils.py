@@ -47,7 +47,13 @@ def normalize_text(text: str) -> str:
         non_bpe_points = [(c, ord(c)) for c in non_bpe_chars]
         raise ValueError(f"Non-supported character found: {non_bpe_points}")
 
-    text = text.replace("\t", " ").replace("\n", " ").replace("\r", " ").replace("*", " ").strip()
+    text = (
+        text.replace("\t", " ")
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .replace("*", " ")
+        .strip()
+    )
     text = re.sub("\s\s+", " ", text)  # remove multiple spaces
     return text
 
@@ -55,7 +61,9 @@ def normalize_text(text: str) -> str:
 def check_audio_file(path_or_uri, threshold_s=30):
     if "http" in path_or_uri:
         temp_fd, filepath = tempfile.mkstemp()
-        os.close(temp_fd)  # Close the file descriptor, curl will create a new connection
+        os.close(
+            temp_fd
+        )  # Close the file descriptor, curl will create a new connection
         curl_command = ["curl", "-L", path_or_uri, "-o", filepath]
         subprocess.run(curl_command, check=True)
 
@@ -79,7 +87,9 @@ def get_default_dtype() -> str:
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()):
             device_properties = torch.cuda.get_device_properties(i)
-            dtype = "float16" if device_properties.major <= 7 else "float16"  # tesla and turing architectures
+            dtype = (
+                "float16" if device_properties.major <= 7 else "float16"
+            )  # tesla and turing architectures
     else:
         dtype = "float16"
 
